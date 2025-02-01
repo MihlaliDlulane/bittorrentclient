@@ -7,7 +7,7 @@ fn decode_bencoded_value(encoded_value: &str) -> i64 {
     let string_ecode = std::string::String::from(encoded_value);
     let uncoded_value = string_ecode.trim_matches(['i','e']);
     // If encoded_value starts with a digit, it's a number
-    if uncoded_value.chars().next().unwrap().is_digit(10) {
+    if uncoded_value.chars().next().unwrap().is_digit(10) || uncoded_value.chars().next().unwrap() == '-' {
         return uncoded_value.parse::<i64>().unwrap();
     } else {
         panic!("Unhandled encoded value: {}", encoded_value)
