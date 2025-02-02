@@ -45,9 +45,9 @@ fn main() {
         let decoded_value = decode_bencoded_value(encoded_value);
 
         if let Some(s) = decoded_value.downcast_ref::<String>() {
-            println!("{}",s);
+            println!("\"{}\"",s)
         } else if let Some(n) = decoded_value.downcast_ref::<i64>()  {
-            println!("\"{}\"",n)
+            println!("{}",n)
         }
 
     } else {
