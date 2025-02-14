@@ -33,28 +33,28 @@ use std::any::Any;
 //     return true;
 // }
 
-fn dyn_type_check(value1:&Box<dyn Any>) -> String {
-    // Check what type a dynamic variable is 
-    match value1 {
+// fn dyn_type_check(value1:&Box<dyn Any>) -> String {
+//     // Check what type a dynamic variable is 
+//     match value1 {
 
-        value if value.is::<i64>() => {
-            return "int".to_string();
-        }
+//         value if value.is::<i64>() => {
+//             return "int".to_string();
+//         }
 
-        value if value.is::<String>() => {
-            return "string".to_string();
-        }
+//         value if value.is::<String>() => {
+//             return "string".to_string();
+//         }
 
-        value if value.is::<Vec<Box<dyn Any>>>() => {
-            return "array".to_string();
-        }
+//         value if value.is::<Vec<Box<dyn Any>>>() => {
+//             return "array".to_string();
+//         }
         
-        _ => {
-            return "unkown".to_string();
-        }
-    }
+//         _ => {
+//             return "unkown".to_string();
+//         }
+//     }
     
-}
+// }
 
 #[test]
 fn test_intergers() {

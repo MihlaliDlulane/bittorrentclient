@@ -1,6 +1,7 @@
 use bittorrentclient::decode::decode_bencoded_value;
 use std::any::Any;
 use std::env;
+use std::collections::HashMap;
 
 fn print_bencoded_value(value: &Box<dyn Any>) {
     if let Some(s) = value.downcast_ref::<String>() {
@@ -16,6 +17,18 @@ fn print_bencoded_value(value: &Box<dyn Any>) {
             }
         }
         print!("]");
+    } else if let Some(map) = value.downcast_ref::<HashMap<String, Box<dyn Any>>>() {
+        print!("{{");
+        let mut first = true;
+        for (key, val) in map.iter() {
+            if !first {
+                print!(", ");
+            }
+            print!("\"{}\": ", key);
+            print_bencoded_value(val);
+            first = false;
+        }
+        print!("}}");
     } else {
         print!("<Unknown Type>");
     }
