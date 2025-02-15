@@ -1,5 +1,9 @@
 use core::panic;
+use anyhow::{Context,Result};
+use std::result::Result::Ok;
+use serde_bencode::to_bytes;
 use serde_json;
+use sha1::{Digest, Sha1};
 
 #[allow(dead_code)]
 pub fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value,&str)  {
@@ -61,4 +65,20 @@ pub fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value,&str)  {
     }
 
     panic!("unhandles bencode value:{}",encoded_value)
+}
+
+pub fn extract_piecce_hashes(pieces: &[u8]) -> Vec<[u8;20]> {
+    pieces.chunks_exact(20)
+          .map(|chunk| chunk.try_into().expect("Invalid sha1 length"))
+          .collect()
+}
+
+pub fn compute_info_hash(raw_info: &serde_bencode::value::Value) -> Result<[u8; 20]> {
+    let info_bytes = to_bytes(raw_info).context("Failed to decode into dictionary")?;
+
+    let mut hasher = Sha1::new();
+    hasher.update(&info_bytes);
+    let hash_result =hasher.finalize();
+
+    Ok(hash_result.into())
 }
