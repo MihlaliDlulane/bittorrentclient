@@ -1,54 +1,51 @@
 use bittorrentclient::decode::decode_bencoded_value;
-use std::any::Any;
-use std::env;
-use std::collections::HashMap;
+use clap::{Parser,Subcommand};
+use anyhow::{Context, Ok,Result};
+use serde::Deserialize;
+use serde_bytes::ByteBuf;
 
-fn print_bencoded_value(value: &Box<dyn Any>) {
-    if let Some(s) = value.downcast_ref::<String>() {
-        print!("\"{}\"", s);
-    } else if let Some(n) = value.downcast_ref::<i64>() {
-        print!("{}", n);
-    } else if let Some(vec) = value.downcast_ref::<Vec<Box<dyn Any>>>() {
-        print!("[");
-        for (i, item) in vec.iter().enumerate() {
-            print_bencoded_value(item);
-            if i < vec.len() - 1 {
-                print!(", ");
-            }
-        }
-        print!("]");
-    } else if let Some(map) = value.downcast_ref::<HashMap<String, Box<dyn Any>>>() {
-        print!("{{");
-        let mut first = true;
-        for (key, val) in map.iter() {
-            if !first {
-                print!(", ");
-            }
-            print!("\"{}\": ", key);
-            print_bencoded_value(val);
-            first = false;
-        }
-        print!("}}");
-    } else {
-        print!("<Unknown Type>");
-    }
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[command(subcommand)]
+    command : Command
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        println!("Usage: {} decode <bencoded_value>", args[0]);
-        return;
+#[derive(Subcommand)]
+enum Command {
+    Decode {value:String},
+    Info {path:String}
+}
+
+#[derive(Deserialize,Debug)]
+struct Info {
+    length: Option<u64>,
+    name: String,
+    //piece_length :u64,
+    pieces: ByteBuf,
+}
+
+#[derive(Deserialize,Debug)]
+struct Torrent {
+    announce: String,
+    info:Info
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+    
+    match args.command {
+        Command::Decode { value } => {
+            let decodedvalue = decode_bencoded_value(&value).0;
+            println!("{decodedvalue}");
+        }
+        Command::Info { path } => {
+            let torrent_file = std::fs::read(path).context("Reading torrent file")?;
+            let data:Torrent = serde_bencode::from_bytes(&torrent_file).context("Parsing torrent file")?;
+            println!("Torrent url: {}",data.announce);
+            println!("info: {}",data.info.length.unwrap());
+        }    
     }
 
-    let command = &args[1];
-
-    if command == "decode" {
-        let encoded_value = &args[2];
-        let decoded_value = decode_bencoded_value(encoded_value);
-
-        print_bencoded_value(&decoded_value);
-    } else {
-        println!("Unknown command: {}", command);
-    }
+    Ok(())
 }
