@@ -8,6 +8,7 @@ use serde::{de::value, Deserialize, Deserializer};
 use serde_bytes::{deserialize, ByteBuf};
 use serde_bencode::value::Value;
 use hex::encode as hex_encode;
+use sha1::{Digest,Sha1};
 
 
 #[derive(Parser)]
@@ -61,20 +62,6 @@ struct File{
 }
 
 
-pub fn info_hash_to_bencode_string(info_hash: &[u8; 20]) -> Value {
-    // Create a Bencoded string (e.g., "20:<info_hash_bytes>")
-    let info_hash_len = info_hash.len();
-    let mut bencoded_str = Vec::new();
-
-    // First, write the length of the string (20 in this case)
-    bencoded_str.push_str(&info_hash_len.to_string());
-
-    // Then, write the actual byte array
-    bencoded_str.extend_from_slice(info_hash);
-
-    // Return as Bencode String Value
-    Value::String(bencoded_str.into())
-}
 
 fn main() -> () {
     let args = Args::parse();
@@ -98,9 +85,11 @@ fn main() -> () {
                 }
             }
 
-            let info_hash = compute_info_hash(&data.raw_info).unwrap();
-            let bencoded_info_hash = info_hash_to_bencode_string(&info_hash);
-            println!("Info hash: {:?}",bencoded_info_hash);
+            let info_hash = serde_bencode::to_bytes(&data.raw_info).context("re bencode?").unwrap();
+            let mut hasher = Sha1::new();
+            hasher.update(&info_hash);
+            let info_has = hasher.finalize();
+            println!("Info hash: {}",hex::encode(&info_has));
 
             println!("Piece length: {:?}",data.info.plength);
             let piece_hash = extract_piecce_hashes(&data.info.pieces);
