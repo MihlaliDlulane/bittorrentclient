@@ -1,7 +1,7 @@
 #![allow(unused)]
 mod utils;
 use clap::{Parser, Subcommand};
-use utils::commands::{print_decode,print_info};
+use utils::commands::{print_decode,print_info,print_peers};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -18,7 +18,8 @@ enum Command {
 }
 
 
-fn main() -> () {
+#[tokio::main]
+async fn main() -> () {
     let args = Args::parse();
     
     match args.command {
@@ -29,7 +30,8 @@ fn main() -> () {
             print_info(path);
         }    
         Command::Peers { path } => {
-
+            println!("Command for peers!");
+            print_peers(path).await;
         }
     }
 
