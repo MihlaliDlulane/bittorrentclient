@@ -73,12 +73,11 @@ pub fn extract_piecce_hashes(pieces: &[u8]) -> Vec<[u8;20]> {
           .collect()
 }
 
-pub fn compute_info_hash(raw_info: &serde_bencode::value::Value) -> Result<[u8; 20]> {
-    let info_bytes = to_bytes(raw_info).context("Failed to decode into dictionary")?;
-
-    let mut hasher = Sha1::new();
-    hasher.update(&info_bytes);
-    let hash_result =hasher.finalize();
-
-    Ok(hash_result.into())
+pub fn compute_info_hash(raw_info: &[u8]) -> [u8; 20] {
+    let hash_result = Sha1::digest(raw_info);
+    let mut info_hash = [0u8; 20];
+    info_hash.copy_from_slice(&hash_result[..20]);
+    
+    println!("Computed Info Hash (Hex): {}", hex::encode(&info_hash));
+    info_hash
 }

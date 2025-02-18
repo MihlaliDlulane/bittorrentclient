@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use crate::utils::decode::{decode_bencoded_value,extract_piecce_hashes,compute_info_hash};
-use anyhow::Context;
+use anyhow::{anyhow,Context};
 use std::result::Result;
 use serde::{Deserialize, Deserializer};
 use serde_bytes::ByteBuf;
@@ -10,13 +10,14 @@ use hex::encode as hex_encode;
 use sha1::{Digest,Sha1};
 use reqwest::Client;
 use std::collections::HashMap;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC,percent_encode};
 use url::form_urlencoded;
 
 #[derive(Deserialize,Clone,Debug)]
 struct Info {
     name:String, // Name of the torrent file
     #[serde(rename = "piece length")]
-    plength:usize, // Size of each piece as bytes     
+    length:usize, // Size of each piece as bytes     
     pieces:ByteBuf, // raw SHA1 Hashes of pieces
     #[serde(flatten)]
     keys:Keys // Can be lenght if its single file torrent or 'files' if its a multi file torrent
@@ -25,7 +26,7 @@ struct Info {
 #[derive(Clone,Debug)]
 struct Torrent {
     announce:String,
-    raw_info:Value,
+    raw_info:Vec<u8>,
     info:Info,
 }
 
@@ -52,7 +53,7 @@ struct File{
 #[derive(Deserialize,Clone,Debug)]
 struct TorrentGetRequest{
     url:String, // url
-    info_hash:Vec<u8>, //  the info hash of the torrent
+    info_hash:String, //  the info hash of the torrent
     peer_id:String, //  a unique identifier for your client
     port:u16, // the port your client is listening on
     uploaded:u64, // the total amount uploaded so far
@@ -87,7 +88,7 @@ pub fn print_info(path:String) {
     let info_has = hasher.finalize();
     println!("Info hash: {}",hex::encode(&info_has));
 
-    println!("Piece length: {:?}",data.info.plength);
+    println!("Piece length: {:?}",data.info.length);
     let piece_hash = extract_piecce_hashes(&data.info.pieces);
     for (i,hash) in piece_hash.iter().enumerate() {
         println!("Piece: {}, hash: {}",i,hex_encode(hash));
@@ -95,29 +96,22 @@ pub fn print_info(path:String) {
 }
 
 
-pub async fn print_peers(path:String) -> Result<(), Box<dyn std::error::Error>> {
-   
+pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>> {
     let data = makequery(path);
-    let client = Client::new();
-    let url = data.url;
+    let client = reqwest::Client::new();
+    let url = data.url.clone();
 
-    println!("Url request to {}",url);
+    println!("Url request to {}", url);
+    println!("info hash: {}",data.info_hash);
+
     let mut params = HashMap::new();
-
-    
-    let result = Sha1::digest(data.info_hash);
-    let result = form_urlencoded::byte_serialize(&result).collect::<String>();
-
-    println!("result:{}",result);
-
-
-    params.insert("info_hash",result);
-    params.insert("peer_id",data.peer_id);
-    params.insert("port",data.port.to_string());
-    params.insert("uploaded",data.uploaded.to_string());
-    params.insert("downloaded",data.dowloaded.to_string());
-    params.insert("left",data.left.to_string());
-    params.insert("compact",data.compact.to_string());
+    params.insert("info_hash", data.info_hash);
+    params.insert("peer_id", data.peer_id);
+    params.insert("port", data.port.to_string());
+    params.insert("uploaded", data.uploaded.to_string());
+    params.insert("downloaded", data.dowloaded.to_string());
+    params.insert("left", data.left.to_string());
+    params.insert("compact", data.compact.to_string());
 
     let response = client.get(url).query(&params).send().await?;
 
@@ -125,41 +119,36 @@ pub async fn print_peers(path:String) -> Result<(), Box<dyn std::error::Error>> 
         let body = response.text().await?;
         println!("Response: {}", body);
     } else {
-        println!("Request failed with status: {}", response.status());
+        print_decode(response.status().to_string());
+
     }
 
     Ok(())
 }
 
-fn makequery(path:String) -> TorrentGetRequest{
-    let torrent_file = std::fs::read(path).context("Reading torrent file");
-    let data:Torrent = serde_bencode::from_bytes(&torrent_file.unwrap()).context("Parsing torrent file").unwrap();
+fn makequery(path: String) -> TorrentGetRequest {
+    let torrent_file = std::fs::read(path).expect("Failed to read torrent file");
+    let data: Torrent = serde_bencode::from_bytes(&torrent_file).expect("Parsing failed");
+
     let url1 = data.announce;
-    let mut torrent_files: Vec<(String,usize)> = Vec::new();
 
-    match &data.info.keys {
-        Keys::SingleFile {length} => {torrent_files.push((data.info.name,*length))},
-        Keys::MultiFile { files } => {
-            for file in files{
-                torrent_files.push((file.path[0].clone(),file.length));
-            }
-        }
-    }
+    let info_hash = compute_info_hash(&data.raw_info);
+    let encoded_info_hash = url_encode_info_hash(&info_hash);
 
-    let info_hash1 = serde_bencode::to_bytes(&data.raw_info).context("re bencode?").unwrap();
-    
-    let querystruct = TorrentGetRequest{
+    TorrentGetRequest {
         url: url1,
-        info_hash : info_hash1,
-        peer_id : "11111222223333344444".to_string(),
-        port : 6881,
+        info_hash: encoded_info_hash, 
+        peer_id: "11111222223333344444".to_string(),
+        port: 6881,
         uploaded: 0,
         dowloaded: 0,
-        left: torrent_files[0].1,
-        compact : 1
-    };
+        left: 0,
+        compact: 1,
+    }
+}
 
-    return querystruct
+fn url_encode_info_hash(info_hash: &[u8]) -> String {
+    form_urlencoded::byte_serialize(info_hash).collect::<String>()
 }
 
 impl<'de> Deserialize<'de> for Torrent {
@@ -180,24 +169,33 @@ impl<'de> Deserialize<'de> for Torrent {
             _ => return Err(serde::de::Error::custom("announce must be a bencoded string")),
         };
 
-        // Extract raw info as bencoded bytes
+        // Extract raw info as bencoded dictionary (not bytes)
         let raw_info_value = map
             .remove("info")
             .ok_or_else(|| serde::de::Error::missing_field("info"))?;
 
-        let raw_info = raw_info_value.clone();
+        // Debugging raw_info_value to see the structure
+        //println!("Raw info value: {:?}", raw_info_value);
 
-        let temp_raw_info = serde_bencode::to_bytes(&raw_info_value)
-            .map_err(|e| serde::de::Error::custom(format!("Bencode serialization error: {}", e)))?;
+        let raw_info_bytes = match raw_info_value {
+            Value::Dict(_) => {
+                 // Serialize the `info` dictionary to bencoded bytes
+                 serde_bencode::to_bytes(&raw_info_value)
+                 .map_err(|e| serde::de::Error::custom(format!("Bencode serialization error: {}", e)))?
+            }
+            _ => return Err(serde::de::Error::custom("info must be a bencoded dictionary")),
+        };
 
-        // Deserialize info into the Info struct
-        let info: Info = serde_bencode::from_bytes(&temp_raw_info)
+        //println!("raw_info_byts: {:?}",raw_info_bytes);
+
+        // Return the Torrent struct with the correct info_hash
+        let info: Info = serde_bencode::from_bytes(&raw_info_bytes)
             .map_err(|e| serde::de::Error::custom(format!("Bencode deserialization error: {}", e)))?;
 
-        // Return the Torrent struct
+
         Ok(Torrent {
             announce,
-            raw_info,
+            raw_info: raw_info_bytes,
             info,
         })
     }

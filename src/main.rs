@@ -30,7 +30,6 @@ async fn main() -> () {
             print_info(path);
         }    
         Command::Peers { path } => {
-            println!("Command for peers!");
             print_peers(path).await;
         }
     }
