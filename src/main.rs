@@ -2,6 +2,7 @@
 mod utils;
 use clap::{Parser, Subcommand};
 use utils::commands::{print_decode,print_info,print_peers};
+use utils::torrent_info::{handletorret};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -27,7 +28,9 @@ async fn main() -> () {
             print_decode(value);
         }
         Command::Info { path } => {
-            print_info(path);
+            handletorret(path);
+
+            //print_info(path);
         }    
         Command::Peers { path } => {
             print_peers(path).await;

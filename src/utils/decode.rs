@@ -79,5 +79,6 @@ pub fn compute_info_hash(raw_info: &[u8]) -> [u8; 20] {
     info_hash.copy_from_slice(&hash_result[..20]);
     
     println!("Computed Info Hash (Hex): {}", hex::encode(&info_hash));
+    println!("Computed Info Hash: {:?}",&info_hash);
     info_hash
 }

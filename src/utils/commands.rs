@@ -12,6 +12,9 @@ use reqwest::Client;
 use std::collections::HashMap;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC,percent_encode};
 use url::form_urlencoded;
+use bip_bencode::{BencodeRef, BRefAccess, BDecodeOpt};
+use std::default::Default;
+
 
 #[derive(Deserialize,Clone,Debug)]
 struct Info {
@@ -98,14 +101,14 @@ pub fn print_info(path:String) {
 
 pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>> {
     let data = makequery(path);
-    let client = reqwest::Client::new();
-    let url = data.url.clone();
+    let client = Client::new();
+    let base_url = data.url.clone();
 
-    println!("Url request to {}", url);
-    println!("info hash: {}",data.info_hash);
+    println!("Url request to {}", base_url);
+    println!("info hash: {}", data.info_hash);
 
+    // URL encode all parameters except "info_hash"
     let mut params = HashMap::new();
-    params.insert("info_hash", data.info_hash);
     params.insert("peer_id", data.peer_id);
     params.insert("port", data.port.to_string());
     params.insert("uploaded", data.uploaded.to_string());
@@ -113,14 +116,21 @@ pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>>
     params.insert("left", data.left.to_string());
     params.insert("compact", data.compact.to_string());
 
-    let response = client.get(url).query(&params).send().await?;
+    // Serialize parameters (except info_hash) using serde_urlencoded
+    let encoded_params = serde_urlencoded::to_string(&params)?;
+
+    // Manually construct final URL with unencoded info_hash
+    let tracker_url = format!("{}?{}&info_hash={}", base_url, encoded_params, data.info_hash);
+
+    println!("Final URL: {}", tracker_url);
+
+    let response = client.get(&tracker_url).send().await?;
 
     if response.status().is_success() {
         let body = response.text().await?;
         println!("Response: {}", body);
     } else {
-        print_decode(response.status().to_string());
-
+        eprintln!("Request failed: {}", response.status());
     }
 
     Ok(())
@@ -130,14 +140,19 @@ fn makequery(path: String) -> TorrentGetRequest {
     let torrent_file = std::fs::read(path).expect("Failed to read torrent file");
     let data: Torrent = serde_bencode::from_bytes(&torrent_file).expect("Parsing failed");
 
-    let url1 = data.announce;
+    let raw_data = BencodeRef::decode(&torrent_file, BDecodeOpt::default()).unwrap();
+    let lookup = raw_data.dict().unwrap().lookup("info".as_bytes()).unwrap();
+    let raw_lookup = BencodeRef::buffer(lookup);
 
-    let info_hash = compute_info_hash(&data.raw_info);
-    let encoded_info_hash = url_encode_info_hash(&info_hash);
+    let url1 = data.announce;
+    let info_hash = compute_info_hash(&raw_lookup);
+
+    // Only encode non-alphanumeric characters in info_hash
+    let encoded_info_hash = utf8_percent_encode(&info_hash, NON_ALPHANUMERIC).to_string(); // Keep it raw
 
     TorrentGetRequest {
         url: url1,
-        info_hash: encoded_info_hash, 
+        info_hash:encoded_info_hash, 
         peer_id: "11111222223333344444".to_string(),
         port: 6881,
         uploaded: 0,
