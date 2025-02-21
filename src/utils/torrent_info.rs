@@ -1,11 +1,6 @@
-#[macro_use]
-use crate::utils::decode::{decode_bencoded_value,extract_piecce_hashes,compute_info_hash};
 use serde_bencode::de;
 use serde_bytes::ByteBuf;
 use serde::Deserialize;
-use std::io::{self, Read};
-use bip_bencode::{BencodeRef, BRefAccess, BDecodeOpt};
-use std::default::Default;
 
 #[derive(Debug, Deserialize)]
 pub struct Node(String, i64);
@@ -99,11 +94,4 @@ pub fn handletorret(path:String) {
         Ok(t) => render_torrent(&t),
         Err(e) => println!("Error: {e:?}")
     }
-
-    // let raw_data = BencodeRef::decode(&torrent_file,BDecodeOpt::default()).unwrap();
-    // let lookup =  raw_data.dict().unwrap().lookup("info".as_bytes()).unwrap();
-    // let raw_lookup = BencodeRef::buffer(lookup);
-
-    // let info_hash = compute_info_hash(&raw_lookup);
-    // println!("Info hash: {:?}",info_hash);
 }

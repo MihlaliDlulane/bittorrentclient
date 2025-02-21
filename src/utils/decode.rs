@@ -1,7 +1,5 @@
 use core::panic;
-use anyhow::{Context,Result};
 use std::result::Result::Ok;
-use serde_bencode::to_bytes;
 use serde_json;
 use sha1::{Digest, Sha1};
 
@@ -67,18 +65,13 @@ pub fn decode_bencoded_value(encoded_value: &str) -> (serde_json::Value,&str)  {
     panic!("unhandles bencode value:{}",encoded_value)
 }
 
-pub fn extract_piecce_hashes(pieces: &[u8]) -> Vec<[u8;20]> {
-    pieces.chunks_exact(20)
-          .map(|chunk| chunk.try_into().expect("Invalid sha1 length"))
-          .collect()
-}
 
 pub fn compute_info_hash(raw_info: &[u8]) -> [u8; 20] {
     let hash_result = Sha1::digest(raw_info);
     let mut info_hash = [0u8; 20];
     info_hash.copy_from_slice(&hash_result[..20]);
     
-    println!("Computed Info Hash (Hex): {}", hex::encode(&info_hash));
-    println!("Computed Info Hash: {:?}",&info_hash);
+    // println!("Computed Info Hash (Hex): {}", hex::encode(&info_hash));
+    // println!("Computed Info Hash: {:?}",&info_hash);
     info_hash
 }
