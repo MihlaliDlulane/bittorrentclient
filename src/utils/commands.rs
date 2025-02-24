@@ -9,7 +9,6 @@ use std::collections::HashMap;
 use percent_encoding::{percent_encode,NON_ALPHANUMERIC};
 use bip_bencode::{BencodeRef, BRefAccess, BDecodeOpt};
 use std::default::Default;
-use serde_bytes::ByteBuf;
 use std::net::{IpAddr,Ipv4Addr};
 use std::fmt;
 
@@ -19,6 +18,7 @@ struct TorrentGetRequest{
     url:String, // url
     url_list:Option<Vec<Vec<String>>>, // list of trackers
     info_hash:String, //  the info hash of the torrent
+    info_hash_bytes:[u8;20],
     peer_id:String, //  a unique identifier for your client
     port:u16, // the port your client is listening on
     uploaded:u64, // the total amount uploaded so far
@@ -35,9 +35,9 @@ struct GetResponse{
 }
 
 #[derive(Debug,Serialize,Deserialize)]
-struct Peer{
-    ip:IpAddr,
-    port:u16
+pub struct Peer{
+    pub ip:IpAddr,
+    pub port:u16
 }
 
 fn deserialize_peers<'de, D>(deserializer: D) -> Result<Vec<Peer>, D::Error>
@@ -94,8 +94,8 @@ pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>>
     let client = Client::new();
     let base_url = data.url.clone();
 
-    println!("Url request to {}", base_url);
-    println!("info hash: {}", data.info_hash);
+    // println!("Url request to {}", base_url);
+    // println!("info hash: {}", data.info_hash);
 
     // URL encode all parameters except "info_hash"
     let mut params = HashMap::new();
@@ -116,7 +116,6 @@ pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>>
 
     let response = client.get(&tracker_url).send().await?;
     let response = response.bytes().await?;
-    println!("Bencode response: {:?}",response);
     let bencode_response = de::from_bytes::<GetResponse>(&response);
     
     match bencode_response {
@@ -128,6 +127,44 @@ pub async fn print_peers(path: String) -> Result<(), Box<dyn std::error::Error>>
 
  
     Ok(())
+}
+
+pub async fn return_peers_and_infohash(path: String) -> Result<(Vec<Peer>,[u8;20]), Box<dyn std::error::Error>> {
+    let data = makequery(path);
+    let client = Client::new();
+    let base_url = data.url.clone();
+
+    // println!("Url request to {}", base_url);
+    // println!("info hash: {}", data.info_hash);
+
+    // URL encode all parameters except "info_hash"
+    let mut params = HashMap::new();
+    params.insert("peer_id", data.peer_id);
+    params.insert("port", data.port.to_string());
+    params.insert("uploaded", data.uploaded.to_string());
+    params.insert("downloaded", data.dowloaded.to_string());
+    params.insert("left", data.left.to_string());
+    params.insert("compact", data.compact.to_string());
+
+    // Serialize parameters (except info_hash) using serde_urlencoded
+    let encoded_params = serde_urlencoded::to_string(&params)?;
+
+    // Manually construct final URL with unencoded info_hash
+    let tracker_url = format!("{}?{}&info_hash={}", base_url, encoded_params, data.info_hash);
+
+    println!("Final URL: {}", tracker_url);
+
+    let response = client.get(&tracker_url).send().await?;
+    let response = response.bytes().await?;
+    let bencode_response = de::from_bytes::<GetResponse>(&response);
+    
+    match bencode_response {
+        Ok(x) =>{
+            return Ok((x.peers,data.info_hash_bytes))
+        }
+        Err(e) =>{panic!("Error: {e:?}")}
+    }
+
 }
 
 fn makequery(path: String) -> TorrentGetRequest {
@@ -158,7 +195,7 @@ fn makequery(path: String) -> TorrentGetRequest {
         Err(e) => { panic!("Error: {e:?}")}
     }
 
-    println!("Url:{}",url1);
+
     let info_hash = compute_info_hash(&raw_lookup);
 
     // Only encode non-alphanumeric characters in info_hash
@@ -167,7 +204,8 @@ fn makequery(path: String) -> TorrentGetRequest {
     TorrentGetRequest {
         url: url1,
         url_list: Some(trackerlist),
-        info_hash:encoded_info_hash, 
+        info_hash:encoded_info_hash,
+        info_hash_bytes : info_hash, 
         peer_id: "11111222223333344444".to_string(),
         port: 6881,
         uploaded: 0,
