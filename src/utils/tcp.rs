@@ -4,42 +4,53 @@ use std::net::IpAddr;
 use rand::Rng;
 use rand::distr::Alphanumeric;
 
-pub async fn peerhandshake(peerip:IpAddr,port:u16,info_hash:&[u8;20]) -> Result<(),  Box<dyn std::error::Error>> {
-    let peer = format!("{}:{}",peerip,port);
-    println!("Connecting to peer: {}",peer);
-    let mut peerconnection = TcpStream::connect(peer).await?;
+
+pub async fn peer_handshake(peer_ip: IpAddr, port: u16, info_hash: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+
+    let peer_addr = format!("{}:{}", peer_ip, port);
+    let mut peer_connection = TcpStream::connect(peer_addr).await?;
     println!("Connected to peer");
 
-    let h_len = 19u8;
-    let h_string = "BitTorrent protocol";
-    let h_reserve = [0u8;8];
-    let h_peer_id = generate_peer_id().into_bytes();
-    
+    // Generate a valid 20-byte peer_id
+    let peer_id: Vec<u8> = format!("-BT7110-{}", generate_random_id(12)).into_bytes();
+
+    let reserved_bytes = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+    // Construct handshake message
     let mut handshake = Vec::new();
-    handshake.push(h_len);
-    handshake.extend_from_slice(h_string.as_bytes());
-    handshake.extend_from_slice(&h_reserve);
-    handshake.extend_from_slice(info_hash);
-    handshake.extend_from_slice(&h_peer_id);
+    handshake.push(19); // Length of protocol string
+    handshake.extend_from_slice(b"BitTorrent protocol"); // Protocol string
+    handshake.extend_from_slice(&reserved_bytes); // Reserved bytes (all zeros)
+    handshake.extend_from_slice(info_hash); // Info hash (20 bytes)
+    handshake.extend_from_slice(&peer_id); // Peer ID (20 bytes)
 
-    println!("Handshake: {:?}",&handshake);
+    print_hex(&handshake);
 
-    peerconnection.write_all(&handshake).await?;
-    println!("Handhsake message sent!");
+    //println!("Handshake: {:?}", handshake);
 
-    let mut buffer =[0;1024];
-    let n = peerconnection.read(&mut buffer).await?;
-    println!("Received: {}", String::from_utf8_lossy(&buffer[..n]));
 
+    // Send handshake
+    peer_connection.write_all(&handshake).await?;
+    println!("Handshake message sent!");
+
+    // Read response
+    let mut buffer = [0; 68]; 
+    peer_connection.read_exact(&mut buffer).await?;
+
+    println!("Received handshake response: {:?}", buffer);
     Ok(())
 }
 
-fn generate_peer_id() -> String {
-    let random_part: String = rand::rng()
+// Generate a random 12-character string for peer_id
+fn generate_random_id(len: usize) -> String {
+    rand::rng()
         .sample_iter(&Alphanumeric)
-        .take(12)  // Ensure 12 random characters
+        .take(len)
         .map(char::from)
-        .collect();
+        .collect()
+}
 
-    format!("-TG0001-{}", random_part)  // "-TG0001-" + 12 random chars
+
+fn print_hex(data: &[u8]) {
+    println!("{}", data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" "));
 }

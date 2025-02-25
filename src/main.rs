@@ -3,7 +3,7 @@ mod utils;
 use clap::{Parser, Subcommand};
 use utils::commands::{print_decode,print_peers,return_peers_and_infohash};
 use utils::torrent_info::handletorret;
-use utils::tcp::peerhandshake;
+use utils::tcp::peer_handshake;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -47,8 +47,8 @@ async fn main() -> () {
                     let infohash = e.1;
                     
                     for x in peerlist {
-                        match peerhandshake(x.ip, x.port,&infohash).await{
-                            Ok(_s) => { todo!()
+                        match peer_handshake(x.ip, x.port,&infohash).await{
+                            Ok(_s) => { 
                             }
                             Err(e) => {
                                 println!("Error:{}",e)
